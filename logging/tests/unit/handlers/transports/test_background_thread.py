@@ -14,6 +14,7 @@
 
 import logging
 import unittest
+from google.cloud.logging.resource import Resource
 
 import mock
 
@@ -46,6 +47,13 @@ class TestBackgroundThreadHandler(unittest.TestCase):
         self.assertEqual(logger.name, name)
 
     def test_send(self):
+        RESOURCE = Resource(
+            type='gae_app',
+            labels={
+                'module_id': 'default',
+                'version_id': 'test',
+        })
+
         client = _Client(self.PROJECT)
         name = 'python_logger'
 
@@ -53,13 +61,14 @@ class TestBackgroundThreadHandler(unittest.TestCase):
 
         python_logger_name = 'mylogger'
         message = 'hello world'
+
         record = logging.LogRecord(
             python_logger_name, logging.INFO,
             None, None, message, None, None)
 
-        transport.send(record, message)
+        transport.send(record, message, RESOURCE)
 
-        transport.worker.enqueue.assert_called_once_with(record, message)
+        transport.worker.enqueue.assert_called_once_with(record, message, RESOURCE)
 
 
 class Test_Worker(unittest.TestCase):
@@ -259,15 +268,16 @@ class _Thread(object):
 
 
 class _Batch(object):
+    from google.cloud.logging.logger import _GLOBAL_RESOURCE
 
     def __init__(self):
         self.entries = []
         self.commit_called = False
         self.commit_count = None
 
-    def log_struct(self, info, severity=logging.INFO):
-        self.log_struct_called_with = (info, severity)
-        self.entries.append(info)
+    def log_struct(self, record, severity=logging.INFO, resource=_GLOBAL_RESOURCE):
+        self.log_struct_called_with = (record, severity, resource)
+        self.entries.append(record)
 
     def commit(self):
         self.commit_called = True
